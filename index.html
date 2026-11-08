@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffd84d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Sala Cartoon" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="icon.svg" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <title>Sala de Aula Cartoon Online</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Patrick+Hand&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <!-- PeerJS para conexão Online P2P real (Dados + Voz WebRTC) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+  <!-- TELA DE ENTRADA (LOBBY) -->
+  <div id="lobby-overlay" class="lobby-overlay">
+    <div class="lobby-card cartoon-border">
+      <div class="lobby-badge">ESCOLA CARTOON ONLINE</div>
+      <h1>Sala de Aula Interativa 🎨</h1>
+      <p class="lobby-subtitle">Entre como professor ou aluno, escreva na lousa ou no seu caderno e converse por voz!</p>
+
+      <div class="form-group">
+        <label for="player-name">Seu Nome:</label>
+        <input type="text" id="player-name" class="cartoon-input" placeholder="Ex: Prof. Marcos ou Joãozinho" maxlength="18" value="" />
+      </div>
+
+      <div class="form-group">
+        <label>Escolha seu Papel:</label>
+        <div class="role-selector">
+          <button type="button" class="role-btn active" data-role="teacher" id="role-teacher-btn">
+            <div class="role-icon" id="preview-teacher-icon"></div>
+            <span>Professor(a)</span>
+            <small>Escreve na lousa e vê cadernos</small>
+          </button>
+          <button type="button" class="role-btn" data-role="student" id="role-student-btn">
+            <div class="role-icon" id="preview-student-icon"></div>
+            <span>Aluno(a)</span>
+            <small>Senta na carteira e usa o caderno</small>
+          </button>
+        </div>
+      </div>
+
+      <div class="form-group" id="avatar-selector-group">
+        <label>Aparência do Personagem:</label>
+        <div class="avatar-options" id="avatar-options">
+          <!-- Gerado via JS -->
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group flex-1">
+          <label for="room-code">Código da Sala Online:</label>
+          <input type="text" id="room-code" class="cartoon-input room-input" value="SALA101" maxlength="15" />
+        </div>
+      </div>
+
+      <button type="button" id="join-btn" class="cartoon-btn primary-btn">
+        ENTRAR NA SALA DE AULA 🚀
+      </button>
+
+      <button type="button" id="lobby-install-btn" class="cartoon-btn install-app-btn">
+        📲 Baixar Atalho no Celular / App
+      </button>
+
+      <div id="lobby-status" class="lobby-status"></div>
+    </div>
+  </div>
+
+  <!-- INTERFACE DO JOGO (HUD) -->
+  <div id="game-container" class="game-container">
+
+    <!-- Barra Superior Adaptável (PC e Celular) -->
+    <div class="top-bar">
+      <div class="room-pill cartoon-border">
+        <span class="status-dot online" id="net-status-dot"></span>
+        <span>Sala: <strong id="hud-room-code">SALA101</strong></span>
+        <button id="copy-link-btn" class="mini-btn" title="Copiar link de convite para alunos/professor">🔗 Convidar</button>
+        <button id="hud-install-btn" class="mini-btn install-pill-btn" title="Criar atalho na tela inicial do celular">📲 App</button>
+      </div>
+
+      <div class="players-pill cartoon-border">
+        <span>👥 (<span id="online-count">1</span>):</span>
+        <div id="players-list-inline" class="players-list-inline"></div>
+      </div>
+
+      <div class="audio-controls cartoon-border">
+        <button id="mic-toggle-btn" class="hud-action-btn mic-on" title="Ativar/Desativar seu Microfone">
+          <span id="mic-icon">🎙️</span> <span id="mic-label">Mic</span>
+          <span class="mic-meter"><span id="local-mic-bar"></span></span>
+        </button>
+        <button id="speaker-toggle-btn" class="hud-action-btn speaker-on" title="Silenciar/Ouvir a turma">
+          <span id="speaker-icon">🔊</span>
+        </button>
+        <!-- Botão de abrir caderno (para o Aluno) -->
+        <button id="open-notebook-btn" class="hud-action-btn notebook-btn" title="Abrir meu Caderno de Atividades">
+          📓 Meu Caderno
+        </button>
+        <!-- Botão exclusivo do Professor para Liberar/Bloquear Lousa para Alunos -->
+        <button id="teacher-lock-board-btn" class="hud-action-btn lock-board-btn locked" style="display:none;" title="Liberar ou Bloquear a lousa para os alunos escreverem">
+          🔒 Lousa Bloqueada p/ Alunos
+        </button>
+        <button id="raise-hand-btn" class="hud-action-btn hand-btn" title="Levantar a mão!">
+          ✋ Mão
+        </button>
+        <button id="board-zoom-btn" class="hud-action-btn board-btn" title="Ampliar Lousa para escrever melhor">
+          🔍 Lousa
+        </button>
+      </div>
+    </div>
+
+    <!-- WRAPPER COM SCROLL HORIZONTAL SUAVE NO CELULAR RETRATO -->
+    <div id="stage-scroll-wrapper" class="stage-scroll-wrapper">
+      <!-- CENÁRIO DA SALA DE AULA (PROPORÇÃO 16:9 ESTILO TOCA LIFE) -->
+      <div id="classroom-stage" class="classroom-stage">
+        
+        <!-- PAREDE DE FUNDO (TIJOLINHOS BRANCOS) -->
+        <div class="wall-bg"></div>
+        <div class="wall-baseboard"></div>
+
+        <!-- JANELA ESQUERDA + PRATELEIRA -->
+        <div class="window-unit left-window">
+          <div class="window-outside">
+            <div class="outside-sky"></div>
+            <div class="outside-building"></div>
+            <div class="outside-bush"></div>
+          </div>
+          <div class="window-grid"></div>
+        </div>
+
+        <div class="shelf-unit left-shelf">
+          <div class="shelf-items">
+            <div class="book-stack">
+              <div class="book book-green"></div>
+              <div class="book book-pink"><span>BRAINZ</span></div>
+              <div class="book book-blue"></div>
+            </div>
+            <div class="diploma-frame">
+              <div class="diploma-inner">
+                <div class="gold-ribbon">★</div>
+                <div class="diploma-lines"></div>
+              </div>
+            </div>
+          </div>
+          <div class="shelf-plank"></div>
+          <div class="shelf-bracket left-b"></div>
+          <div class="shelf-bracket right-b"></div>
+        </div>
+
+        <!-- ARMÁRIO BAIXO ESQUERDO -->
+        <div class="side-cabinet left-cabinet">
+          <div class="cabinet-top"></div>
+          <div class="cabinet-drawers">
+            <div class="drawer"><div class="drawer-handle"></div></div>
+            <div class="drawer"><div class="drawer-handle"></div></div>
+          </div>
+        </div>
+
+        <!-- JANELA DIREITA + PRATELEIRA -->
+        <div class="window-unit right-window">
+          <div class="window-outside">
+            <div class="outside-sky"></div>
+            <div class="outside-building right-bldg"></div>
+            <div class="outside-tree">
+              <div class="tree-trunk"></div>
+              <div class="tree-crown"></div>
+            </div>
+          </div>
+          <div class="window-grid"></div>
+        </div>
+
+        <div class="shelf-unit right-shelf">
+          <div class="shelf-items right-items">
+            <div class="Supply-cup cup-yellow">
+              <span class="marker m-red"></span>
+              <span class="marker m-yellow"></span>
+              <span class="marker m-green"></span>
+            </div>
+            <div class="Supply-cup cup-blue">
+              <span class="marker m-purple"></span>
+              <span class="marker m-blue"></span>
+              <span class="marker m-pink"></span>
+            </div>
+            <div class="ruler-box">
+              <div class="triangle-ruler"></div>
+              <div class="protractor"></div>
+            </div>
+            <div class="scissors-box">
+              <div class="scissor-handle"></div>
+            </div>
+          </div>
+          <div class="shelf-plank"></div>
+          <div class="shelf-bracket left-b"></div>
+          <div class="shelf-bracket right-b"></div>
+        </div>
+
+        <!-- ARMÁRIO BAIXO DIREITO -->
+        <div class="side-cabinet right-cabinet">
+          <div class="cabinet-top"></div>
+          <div class="cabinet-drawers">
+            <div class="drawer"><div class="drawer-handle"></div></div>
+            <div class="drawer"><div class="drawer-handle"></div></div>
+          </div>
+        </div>
+
+        <!-- LOUSA INTERATIVA TOTALMENTE LIMPA COM APAGADOR FÍSICO -->
+        <div id="whiteboard-wrapper" class="whiteboard-wrapper">
+          <div class="whiteboard-frame">
+            <!-- Canvas 100% limpo onde o professor (e alunos se liberado) escreve e apaga tudo -->
+            <canvas id="whiteboard-canvas" width="960" height="520"></canvas>
+          </div>
+
+          <!-- Aparador / Calha da lousa com canetinhas e APAGADOR FÍSICO CLICÁVEL -->
+          <div class="whiteboard-ledge">
+            <div class="ledge-cup">
+              <span class="ledge-pen p-blue"></span>
+              <span class="ledge-pen p-green"></span>
+              <span class="ledge-pen p-red"></span>
+            </div>
+            <button type="button" class="physical-eraser-prop" id="ledge-eraser-btn" title="Pegar Apagador da Lousa">
+              <span class="eraser-felt"></span>
+              <span class="eraser-wood">APAGADOR</span>
+            </button>
+          </div>
+
+          <!-- Caixa de som / interfone escolar ao lado direito da lousa -->
+          <div class="wall-speaker">
+            <div class="speaker-vents"></div>
+          </div>
+
+          <!-- BARRA DE FERRAMENTAS DA LOUSA -->
+          <div id="board-toolbar" class="board-toolbar cartoon-border">
+            <div class="tool-section colors-section">
+              <button class="color-swatch active" data-color="#232323" style="background:#232323" title="Preto"></button>
+              <button class="color-swatch" data-color="#d94336" style="background:#d94336" title="Vermelho"></button>
+              <button class="color-swatch" data-color="#2b7de9" style="background:#2b7de9" title="Azul"></button>
+              <button class="color-swatch" data-color="#2ea44f" style="background:#2ea44f" title="Verde"></button>
+              <button class="color-swatch" data-color="#f29d38" style="background:#f29d38" title="Laranja"></button>
+              <button class="color-swatch" data-color="#8c52ff" style="background:#8c52ff" title="Roxo"></button>
+              <button class="color-swatch" data-color="#e85d9a" style="background:#e85d9a" title="Rosa"></button>
+            </div>
+            <div class="tool-divider"></div>
+            <div class="tool-section sizes-section">
+              <button class="size-btn" data-size="4" title="Traço Fino"><span style="width:6px;height:6px;"></span></button>
+              <button class="size-btn active" data-size="8" title="Traço Médio"><span style="width:11px;height:11px;"></span></button>
+              <button class="size-btn" data-size="16" title="Traço Grosso"><span style="width:16px;height:16px;"></span></button>
+            </div>
+            <div class="tool-divider"></div>
+            <div class="tool-section actions-section">
+              <button id="tool-pen" class="board-tool-btn active" title="Canetão">🖍️ Canetão</button>
+              <button id="tool-text" class="board-tool-btn" title="Digitar Texto na Lousa">🔤 Texto</button>
+              <button id="tool-eraser" class="board-tool-btn" title="Usar Apagador na Lousa">🧽 Apagador</button>
+              <button id="tool-clear" class="board-tool-btn danger" title="Apagar Lousa Inteira">🗑️ Limpar Tudo</button>
+              <button id="toolbar-lock-btn" class="board-tool-btn lock-toggle-inline" style="display:none;" title="Liberar ou Bloquear escrita dos alunos na lousa">
+                🔒 Liberar Alunos
+              </button>
+            </div>
+            <button id="close-zoom-btn" class="board-tool-btn close-zoom-only">❌ Fechar</button>
+          </div>
+        </div>
+
+        <!-- LIXEIRA CINZA AO LADO DA LOUSA -->
+        <div class="trash-can">
+          <div class="trash-rim"></div>
+          <div class="trash-body">
+            <div class="trash-ribs">
+              <span></span><span></span><span></span><span></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- PISO DE MADEIRA -->
+        <div class="wood-floor">
+          <div class="floor-lines"></div>
+        </div>
+
+        <!-- ÁREA DE CARTEIRAS E PERSONAGENS -->
+        <div id="entities-layer" class="entities-layer">
+          <!-- As carteiras e personagens são posicionados e atualizados aqui -->
+        </div>
+
+      </div>
+    </div>
+
+    <!-- DICA DE CONTROLE NO CANTO INFERIOR -->
+    <div class="bottom-left-badge cartoon-border" id="role-indicator-badge">
+      <div class="smile-icon">😊</div>
+      <div class="badge-text">
+        <strong id="my-hud-name">Professor</strong>
+        <small id="my-hud-hint">Toque em um aluno para ver o caderno dele!</small>
+      </div>
+    </div>
+
+    <div class="bottom-right-badge cartoon-border" id="emote-bar">
+      <button class="emote-btn" data-emote="👏" title="Aplaudir">👏</button>
+      <button class="emote-btn" data-emote="❤️" title="Amei">❤️</button>
+      <button class="emote-btn" data-emote="❓" title="Dúvida">❓</button>
+      <button class="emote-btn" data-emote="⭐" title="Muito Bom!">⭐</button>
+      <button class="emote-btn" data-emote="😂" title="Risada">😂</button>
+    </div>
+
+  </div>
+
+  <!-- ========================================================================
+       MODAL DO CADERNO DO ALUNO (PARA O ALUNO DESENHAR E O PROFESSOR VER AO VIVO)
+       ======================================================================== -->
+  <div id="notebook-modal" class="notebook-modal hidden">
+    <div class="notebook-book cartoon-border">
+      <div class="notebook-spiral">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="notebook-header">
+        <div class="notebook-title-wrap">
+          <span class="notebook-badge" id="notebook-mode-badge">MEU CADERNO</span>
+          <h3 id="notebook-owner-title">Caderno de Atividades 📓</h3>
+        </div>
+        <button type="button" id="close-notebook-btn" class="cartoon-btn close-nb-btn">❌ Fechar</button>
+      </div>
+
+      <div class="notebook-paper-wrapper">
+        <canvas id="notebook-canvas" width="760" height="460"></canvas>
+      </div>
+
+      <!-- Ferramentas do Caderno -->
+      <div id="notebook-toolbar" class="notebook-toolbar">
+        <div class="tool-section">
+          <button class="nb-color-swatch active" data-color="#1e3a8a" style="background:#1e3a8a" title="Caneta Azul"></button>
+          <button class="nb-color-swatch" data-color="#232323" style="background:#232323" title="Lápis Grafite"></button>
+          <button class="nb-color-swatch" data-color="#d94336" style="background:#d94336" title="Caneta Vermelha"></button>
+          <button class="nb-color-swatch" data-color="#2ea44f" style="background:#2ea44f" title="Caneta Verde"></button>
+          <button class="nb-color-swatch" data-color="#f29d38" style="background:#f29d38" title="Marca-texto Laranja"></button>
+          <button class="nb-color-swatch" data-color="#8c52ff" style="background:#8c52ff" title="Roxo"></button>
+        </div>
+        <div class="tool-divider"></div>
+        <div class="tool-section">
+          <button id="nb-tool-pen" class="board-tool-btn active">✏️ Lápis</button>
+          <button id="nb-tool-eraser" class="board-tool-btn">🧽 Borracha</button>
+          <button id="nb-tool-clear" class="board-tool-btn danger">🗑️ Folha Nova</button>
+          <!-- Botões de carimbo de correção exclusivos para quando o Professor está vendo o caderno do aluno -->
+          <button id="nb-stamp-star" class="board-tool-btn stamp-btn" style="display:none;">⭐ Parabéns!</button>
+          <button id="nb-stamp-check" class="board-tool-btn stamp-btn" style="display:none;">✅ Correto!</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE TEXTO NA LOUSA -->
+  <div id="text-prompt-modal" class="text-modal hidden">
+    <div class="text-modal-box cartoon-border">
+      <h3>Escrever na Lousa ✍️</h3>
+      <input type="text" id="board-text-input" class="cartoon-input" placeholder="Digite a palavra ou conta..." maxlength="40" />
+      <div class="text-modal-actions">
+        <button id="board-text-cancel" class="cartoon-btn secondary-btn">Cancelar</button>
+        <button id="board-text-confirm" class="cartoon-btn primary-btn">Escrever</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE DOWNLOAD / CRIAR ATALHO NO CELULAR -->
+  <div id="install-guide-modal" class="text-modal hidden">
+    <div class="text-modal-box install-guide-box cartoon-border">
+      <h3>📲 Instalar Atalho no Celular</h3>
+      <p id="install-guide-desc">Adicione o jogo na tela inicial do seu celular para abrir em tela cheia igual a um aplicativo!</p>
+      <div class="install-steps">
+        <div class="install-step">
+          <strong>🤖 No Android (Chrome):</strong>
+          <span>Toque nos <b>3 pontinhos (⋮)</b> no canto superior do navegador e selecione <b>"Adicionar à tela inicial"</b> ou <b>"Instalar aplicativo"</b>.</span>
+        </div>
+        <div class="install-step">
+          <strong>🍎 No iPhone / iPad (Safari):</strong>
+          <span>Toque no botão <b>Compartilhar (⬆️)</b> na barra inferior e escolha <b>"Adicionar à Tela de Início"</b>.</span>
+        </div>
+      </div>
+      <div class="text-modal-actions">
+        <button id="download-shortcut-file-btn" class="cartoon-btn secondary-btn">💾 Baixar Arquivo de Atalho</button>
+        <button id="close-install-modal-btn" class="cartoon-btn primary-btn">Entendi! 👍</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTAINER DE ÁUDIOS REMOTOS (WEBRTC) -->
+  <div id="remote-audios-container" style="display:none;"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

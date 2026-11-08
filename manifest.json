@@ -1,0 +1,18 @@
+{
+  "name": "Sala de Aula Cartoon Online",
+  "short_name": "Sala Cartoon",
+  "description": "Jogo interativo de Sala de Aula Online com Lousa, Caderno do Aluno e Chat de Voz!",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#231f20",
+  "theme_color": "#ffd84d",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
